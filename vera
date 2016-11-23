@@ -1,0 +1,41 @@
+#!/usr/bin/env python
+
+from sys import *
+host = argv[1]
+
+import subprocess as sp
+
+
+pacmdout = sp.check_output(['pacmd', 'stat'], universal_newlines=True)
+
+print(pacmdout)
+
+import re
+sink = re.findall('^Default sink name: (.*)$', pacmdout, flags=re.MULTILINE)[0]
+
+print(sink)
+
+
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    s.connect((host, 4444))
+    stderr.write('Client has connected.\n')
+    p = sp.Popen(['bash', '-c', 'pacat -r -d '+sink+'.monitor --latency=100000000 | flac --force-raw-format --endian=little --sign=signed --sample-rate=44100 --bps=16 --channels=2 -'], stdout=sp.PIPE)
+    while True:
+        data = p.stdout.read(2048)
+        if len(data) == 0:
+            break
+
+        try:
+            s.sendall(data)
+        except BrokenPipeError:
+            break
+        except ConnectionResetError:
+            break
+    stderr.write('Client has disconnected.\n')
+    p.stdout.close()
+    # The previous call is enough to stop the command, but it will be a 
+    # zombie until after the exit code is read. This is what this last 
+    # p.wait() call is for. DIE ZOMBIES!!
+    p.wait()
