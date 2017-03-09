@@ -6,26 +6,33 @@ import subprocess as sp
 from threading import Thread
 from queue import Queue
 from time import time
+import socket
 
 readsize = 1024
 
-# Audio delay, in bytes. Flac is around 80 KiB/s.
+# Audio delay in seconds.
+delay = 10
 rate = 80*1024
-delay = rate*5
+# Audio delay, in bytes.
+delaybytes = rate*delay
 
 class ClientDisconnected(Exception):
     pass
 class MattHandler(ss.StreamRequestHandler):
     def handle(self):
         stderr.write('Client has connected.\n')
+        self.request.settimeout(60)
         try:
             p = sp.Popen('gst-launch-1.0 filesrc location=/dev/stdin ! '
-                'queue max-size-bytes={} max-size-buffers=0 max-size-time=0 '
-                'leaky=downstream ! decodebin ! autoaudiosink '
-                'sync=false'.format(delay).split(), stdin=sp.PIPE)
+                'decodebin ! queue max-size-bytes={} max-size-buffers=0 max-size-time=0 '
+                'leaky=downstream ! autoaudiosink '
+                'sync=false'.format(delaybytes).split(), stdin=sp.PIPE)
             while True:
                 try:
-                    data = self.rfile.read(readsize)
+                    # This call does not time out. Unless the stream sends a 
+                    # TCP disconnect, when the connection is permanently lost, 
+                    # it hangs forever.
+                    data = self.request.recv(readsize)
                 except BrokenPipeError:
                     raise ClientDisconnected()
                 except ConnectionResetError:
@@ -37,6 +44,8 @@ class MattHandler(ss.StreamRequestHandler):
             pass
         except ClientDisconnected:
             stderr.write('Client has disconnected.\n')
+        except socket.timeout:
+            stderr.write('Connection has timed out.\n')
         p.stdin.close()
         # The previous call is enough to stop the command, but it will be a 
         # zombie until after the exit code is read. This is what this last 
@@ -48,4 +57,8 @@ server = ss.TCPServer(('', 4444), MattHandler)
 
 # Activate the server; this will keep running until you
 # interrupt the program with Ctrl-C
-server.serve_forever()
+try:
+    server.serve_forever()
+except KeyboardInterrupt:
+    print()
+    pass
