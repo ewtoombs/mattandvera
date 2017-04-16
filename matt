@@ -12,7 +12,7 @@ readsize = 1024
 
 # Audio delay in seconds.
 delay = 10
-rate = 80*1024
+rate = 2*44100*16
 # Audio delay, in bytes.
 delaybytes = rate*delay
 
@@ -24,8 +24,8 @@ class MattHandler(ss.StreamRequestHandler):
         self.request.settimeout(60)
         try:
             p = sp.Popen('gst-launch-1.0 filesrc location=/dev/stdin ! '
-                'decodebin ! queue max-size-bytes={} max-size-buffers=0 max-size-time=0 '
-                'leaky=downstream ! autoaudiosink '
+                'decodebin ! queue max-size-bytes={} max-size-buffers=0 '
+                'max-size-time=0 leaky=downstream ! autoaudiosink '
                 'sync=false'.format(delaybytes).split(), stdin=sp.PIPE)
             while True:
                 try:
